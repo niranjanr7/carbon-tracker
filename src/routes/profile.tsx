@@ -18,7 +18,7 @@ function Profile() {
   useEffect(() => setU(getUser()), []);
   return (
     <AppShell title="User Profile" subtitle="Update your information and account settings.">
-      <Panel className="max-w-xl">
+      <Panel className="w-full">
         <div className="mb-6 flex items-center gap-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary font-display text-2xl font-bold text-primary-foreground">{u.name.charAt(0)}</div>
           <div><p className="font-semibold">{u.name}</p><p className="text-sm text-muted-foreground">{u.email}</p></div>

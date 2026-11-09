@@ -4,6 +4,9 @@ import {
   LayoutDashboard, Calculator, History, BarChart3, Lightbulb, Target, Trophy, FileText, User, Info, LogOut, Leaf, Menu,
 } from "lucide-react";
 import { useState } from "react";
+import { signOut } from "firebase/auth";
+import { toast } from "sonner";
+import { auth } from "@/lib/firebase";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -29,6 +32,14 @@ export function Logo({ light }: { light?: boolean }) {
 export function AppShell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      await navigate({ to: "/login" });
+    } catch (error) {
+      toast.error(error instanceof Error ? `Unable to log out: ${error.message}` : "Unable to log out.");
+    }
+  };
   return (
     <div className="flex min-h-screen bg-muted/40">
       <aside className={`fixed inset-y-0 left-0 z-40 w-60 bg-sidebar p-4 transition-transform md:static md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
@@ -41,7 +52,7 @@ export function AppShell({ title, subtitle, children }: { title: string; subtitl
               <n.icon className="h-4 w-4" /> {n.label}
             </Link>
           ))}
-          <button onClick={() => navigate({ to: "/login" as "/" })} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent">
+          <button onClick={() => void logout()} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent">
             <LogOut className="h-4 w-4" /> Logout
           </button>
         </nav>

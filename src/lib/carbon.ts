@@ -7,6 +7,7 @@ export type CarbonRecord = {
   energy: number;
   lpg: number;
   food: number;
+  householdMembers?: number;
 };
 
 export const FACTORS = {
@@ -16,11 +17,58 @@ export const FACTORS = {
   food: { Vegan: 1.5, Vegetarian: 1.7, Mixed: 2.5, "Heavy meat": 3.3 } as const,
 };
 
+export const dailyElectricityEmissions = (units: number, billingDays: number) =>
+  billingDays > 0 ? (units / billingDays) * FACTORS.electricityPerKwh : 0;
+
 export const totalOf = (r: CarbonRecord) => +(r.transport + r.energy + r.lpg + r.food).toFixed(2);
+
+export type MonthlyPerPersonTotal = { month: string; value: number };
+export type EcoGrade = "A" | "B" | "C" | "D" | "E";
+
+export function monthlyPerPersonTotals(records: CarbonRecord[]): MonthlyPerPersonTotal[] {
+  const totals = new Map<string, number>();
+  for (const record of records) {
+    const householdMembers = Math.max(1, Math.floor(record.householdMembers ?? 1));
+    const perPerson =
+      record.transport + record.food + (record.energy + record.lpg) / householdMembers;
+    const month = record.date.slice(0, 7);
+    totals.set(month, (totals.get(month) ?? 0) + perPerson);
+  }
+  return [...totals.entries()]
+    .map(([month, value]) => ({ month, value: +value.toFixed(1) }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+export function ecoGradeForMonthlyEmissions(kgPerPerson: number): EcoGrade {
+  if (kgPerPerson < 100) return "A";
+  if (kgPerPerson < 200) return "B";
+  if (kgPerPerson < 300) return "C";
+  if (kgPerPerson < 400) return "D";
+  return "E";
+}
+
+export function monthlyGoalStreak(
+  monthlyTotals: MonthlyPerPersonTotal[],
+  goal: number,
+  currentMonth: string,
+): number {
+  const totals = new Map(monthlyTotals.map(({ month, value }) => [month, value]));
+  let streak = 0;
+  const monthDate = new Date(`${currentMonth}-01T00:00:00`);
+
+  while (true) {
+    const month = monthDate.toISOString().slice(0, 7);
+    const total = totals.get(month);
+    if (total === undefined || total > goal) return streak;
+    streak += 1;
+    monthDate.setUTCMonth(monthDate.getUTCMonth() - 1);
+  }
+}
 
 const KEY = "carbontracker.records";
 const USER_KEY = "carbontracker.user";
 const GOAL_KEY = "carbontracker.goal";
+const MONTHLY_GOAL_KEY = "carbontracker.monthlyGoalPerPerson";
 
 function seed(): CarbonRecord[] {
   const out: CarbonRecord[] = [];
@@ -86,6 +134,9 @@ export function getUser(): User {
 export const setUser = (u: User) => localStorage.setItem(USER_KEY, JSON.stringify(u));
 export const getGoal = () => (typeof window === "undefined" ? 20 : Number(localStorage.getItem(GOAL_KEY) ?? 20));
 export const setGoal = (g: number) => localStorage.setItem(GOAL_KEY, String(g));
+export const getMonthlyGoal = () =>
+  typeof window === "undefined" ? 100 : Number(localStorage.getItem(MONTHLY_GOAL_KEY) ?? 100);
+export const setMonthlyGoal = (g: number) => localStorage.setItem(MONTHLY_GOAL_KEY, String(g));
 
 export function stats(records: CarbonRecord[]) {
   const now = new Date();
