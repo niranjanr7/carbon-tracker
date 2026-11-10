@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import {
-  LayoutDashboard, Calculator, History, BarChart3, Lightbulb, Target, Trophy, FileText, User, Info, LogOut, Leaf, Menu,
+  LayoutDashboard, Calculator, History, BarChart3, Lightbulb, Target, Trophy, FileText, User, LogOut, Leaf, Menu,
 } from "lucide-react";
 import { useState } from "react";
 import { signOut } from "firebase/auth";
@@ -18,7 +18,6 @@ const nav = [
   { to: "/achievements", label: "Achievements", icon: Trophy },
   { to: "/reports", label: "Reports", icon: FileText },
   { to: "/profile", label: "Profile", icon: User },
-  { to: "/about", label: "About", icon: Info },
 ] as const;
 
 export function Logo({ light }: { light?: boolean }) {

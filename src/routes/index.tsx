@@ -26,7 +26,7 @@ function Index() {
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
         <Logo />
         <nav className="hidden gap-6 text-sm text-muted-foreground md:flex">
-          <a href="#features">Features</a><a href="#how">How it works</a><Link to="/about">About</Link>
+          <a href="#features">Features</a><a href="#how">How it works</a>
         </nav>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" asChild><Link to="/login">Login</Link></Button>
