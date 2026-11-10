@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { deleteRecord, totalOf, useRecords } from "@/lib/carbon";
 import { seo } from "@/lib/seo";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/history")({
   head: () => seo("History", "All your carbon footprint records."),
@@ -35,7 +36,11 @@ function HistoryPage() {
                 <tr key={r.id} className="border-b">
                   <td className="p-2">{r.date}</td><td className="p-2">{r.transport}</td><td className="p-2">{r.energy}</td><td className="p-2">{r.lpg}</td><td className="p-2">{r.food}</td>
                   <td className="p-2 font-semibold">{totalOf(r)}</td>
-                  <td className="p-2"><button aria-label="Delete" onClick={() => deleteRecord(r.id)}><Trash2 className="h-4 w-4 text-destructive" /></button></td>
+                  <td className="p-2"><button aria-label="Delete" onClick={() => {
+                    void deleteRecord(r.id).catch((error: unknown) => toast.error(
+                      error instanceof Error ? `Unable to delete record: ${error.message}` : "Unable to delete record.",
+                    ));
+                  }}><Trash2 className="h-4 w-4 text-destructive" /></button></td>
                 </tr>
               ))}
             </tbody>

@@ -8,10 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import {
   ecoGradeForMonthlyEmissions,
-  getMonthlyGoal,
   monthlyGoalStreak,
   monthlyPerPersonTotals,
   setMonthlyGoal,
+  useMonthlyGoal,
   useRecords,
 } from "@/lib/carbon";
 import { seo } from "@/lib/seo";
@@ -33,18 +33,18 @@ const gradeStyles = {
 
 function Goals() {
   const records = useRecords();
+  const savedGoal = useMonthlyGoal();
   const monthlyTotals = monthlyPerPersonTotals(records);
   const totalsByMonth = new Map(monthlyTotals.map(({ month, value }) => [month, value]));
   const thisMonth = totalsByMonth.get(currentMonth);
-  const [goal, setGoal] = useState(100);
-  const [goalInput, setGoalInput] = useState("100");
+  const [goal, setGoal] = useState(savedGoal);
+  const [goalInput, setGoalInput] = useState(String(savedGoal));
   const goalStreak = monthlyGoalStreak(monthlyTotals, goal, currentMonth);
 
   useEffect(() => {
-    const savedGoal = getMonthlyGoal();
     setGoal(savedGoal);
     setGoalInput(String(savedGoal));
-  }, []);
+  }, [savedGoal]);
 
   const progress = thisMonth === undefined ? 0 : Math.min(100, (thisMonth / goal) * 100);
   const treeYears = thisMonth === undefined ? null : thisMonth / TREE_ABSORPTION_KG_PER_YEAR;
@@ -69,17 +69,21 @@ function Goals() {
   })();
   const under100 = monthlyTotals.some(({ value }) => value < 100);
 
-  const save = () => {
+  const save = async () => {
     const value = Number(goalInput);
     if (!Number.isFinite(value) || value <= 0) {
       toast.error("Enter a monthly goal greater than 0.");
       return;
     }
     const rounded = Math.round(value * 10) / 10;
-    setGoal(rounded);
-    setGoalInput(String(rounded));
-    setMonthlyGoal(rounded);
-    toast.success(`Monthly goal set to ${rounded} kg CO₂e per person`);
+    try {
+      await setMonthlyGoal(rounded);
+      setGoal(rounded);
+      setGoalInput(String(rounded));
+      toast.success(`Monthly goal set to ${rounded} kg CO₂e per person`);
+    } catch (error) {
+      toast.error(error instanceof Error ? `Unable to save monthly goal: ${error.message}` : "Unable to save monthly goal.");
+    }
   };
 
   return (
@@ -101,7 +105,7 @@ function Goals() {
                   onChange={(event) => setGoalInput(event.target.value)}
                 />
               </div>
-              <Button onClick={save}>Save Goal</Button>
+              <Button onClick={() => void save()}>Save Goal</Button>
             </div>
           </div>
           <div>

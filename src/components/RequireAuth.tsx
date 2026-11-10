@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { auth } from "@/lib/firebase";
 import { rememberProtectedPath } from "@/lib/auth";
 import { migrateLegacyUserData } from "@/lib/carbon";
+import { migrateLocalAccountToCloud } from "@/lib/cloud-data";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
@@ -12,26 +13,47 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => onAuthStateChanged(
-    auth,
-    (authenticatedUser) => {
-      if (authenticatedUser) {
-        try {
-          migrateLegacyUserData(authenticatedUser.uid, authenticatedUser.email ?? "");
-        } catch (migrationError) {
-          setError(migrationError instanceof Error ? migrationError.message : "Unable to load account data.");
+  useEffect(() => {
+    let active = true;
+    let generation = 0;
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (authenticatedUser) => {
+        const currentGeneration = ++generation;
+        setLoading(true);
+        setError(null);
+        if (!authenticatedUser) {
+          setUser(null);
           setLoading(false);
           return;
         }
-      }
-      setUser(authenticatedUser);
-      setLoading(false);
-    },
-    (authError) => {
-      setError(authError.message);
-      setLoading(false);
-    },
-  ), []);
+        void (async () => {
+          try {
+            migrateLegacyUserData(authenticatedUser.uid, authenticatedUser.email ?? "");
+            await migrateLocalAccountToCloud(authenticatedUser.uid);
+            if (active && currentGeneration === generation) {
+              setUser(authenticatedUser);
+              setLoading(false);
+            }
+          } catch (syncError) {
+            if (active && currentGeneration === generation) {
+              setError(syncError instanceof Error ? syncError.message : "Unable to sync account data.");
+              setLoading(false);
+            }
+          }
+        })();
+      },
+      (authError) => {
+        if (!active) return;
+        setError(authError.message);
+        setLoading(false);
+      },
+    );
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (!loading && !error && !user) {

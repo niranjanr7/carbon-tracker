@@ -31,7 +31,7 @@ function Register() {
         try {
           const credential = await createUserWithEmailAndPassword(auth, email, f.pw);
           await updateProfile(credential.user, { displayName: f.name });
-          setUser({ name: f.name, email, joined: new Date().toISOString().slice(0, 10) });
+          await setUser({ name: f.name, email, joined: new Date().toISOString().slice(0, 10) });
           toast.success("Account created");
           await nav({ to: consumeProtectedPath() });
         } catch (error) {

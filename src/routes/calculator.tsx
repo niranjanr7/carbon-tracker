@@ -28,6 +28,7 @@ function CalculatorPage() {
 
 function CalculatorContent() {
   const nav = useNavigate();
+  const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("Car");
   const [fuel, setFuel] = useState<Fuel>("Petrol");
   const [km, setKm] = useState("20");
@@ -109,7 +110,18 @@ function CalculatorContent() {
             </div>
             <div className="space-y-4">
               <Result label="Total Daily Footprint" value={total} calc="Sum of all categories" />
-              <Button className="w-full" onClick={() => { addRecord({ date, transport: t, energy: e, lpg: l, food: f, householdMembers: householdMembersValue }); toast.success("Record saved"); nav({ to: "/history" }); }}>Save Record</Button>
+              <Button className="w-full" disabled={saving} onClick={async () => {
+                setSaving(true);
+                try {
+                  await addRecord({ date, transport: t, energy: e, lpg: l, food: f, householdMembers: householdMembersValue });
+                  toast.success("Record saved");
+                  await nav({ to: "/history" });
+                } catch (error) {
+                  toast.error(error instanceof Error ? `Unable to save record: ${error.message}` : "Unable to save record.");
+                } finally {
+                  setSaving(false);
+                }
+              }}>{saving ? "Saving…" : "Save Record"}</Button>
             </div>
           </TabsContent>
         </Tabs>

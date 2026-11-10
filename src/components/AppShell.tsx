@@ -37,7 +37,7 @@ export function AppShell({ title, subtitle, children }: { title: string; subtitl
   );
 }
 
-function AppShellContent({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+function AppShellContent({ title, subtitle, children }: { title: string; subtitle: string | undefined; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const logout = async () => {

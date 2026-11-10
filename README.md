@@ -80,13 +80,31 @@ cd Carbon-Tracker
 bun install
 ```
 
-### 4. Start the development server
+### 4. Configure Firebase
+
+Create a root-level `.env.local` file with the Firebase web app settings:
+
+```env
+VITE_FIREBASE_API_KEY=your-api-key
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-storage-bucket
+VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+VITE_FIREBASE_APP_ID=your-app-id
+VITE_FIREBASE_MEASUREMENT_ID=your-measurement-id
+```
+
+In Firebase Console, enable **Authentication → Email/Password** and create a database under **Firestore Database**. In Firestore **Rules**, publish the contents of [`firestore.rules`](./firestore.rules). The rules restrict each signed-in user to documents under their own UID.
+
+The app syncs records, profile, and goals with Firestore across browsers and devices. On first sign-in from each browser, that browser's existing local data is merged into the signed-in account without overwriting records already in Firestore.
+
+### 5. Start the development server
 
 ```bash
 bun run dev
 ```
 
-### 5. Open the application
+### 6. Open the application
 
 Open the local URL displayed in your terminal, usually:
 

@@ -10,7 +10,6 @@ import { AuthCard } from "@/components/AuthCard";
 import { seo } from "@/lib/seo";
 import { auth } from "@/lib/firebase";
 import { consumeProtectedPath } from "@/lib/auth";
-import { setUser } from "@/lib/carbon";
 
 export const Route = createFileRoute("/login")({
   head: () => seo("Login", "Log in to your CarbonTracker account."),
@@ -27,16 +26,11 @@ function Login() {
         setLoading(true);
         const formData = new FormData(event.currentTarget);
         try {
-          const credential = await signInWithEmailAndPassword(
+          await signInWithEmailAndPassword(
             auth,
             String(formData.get("email")),
             String(formData.get("password")),
           );
-          setUser({
-            name: credential.user.displayName ?? credential.user.email?.split("@")[0] ?? "User",
-            email: credential.user.email ?? "",
-            joined: credential.user.metadata.creationTime?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
-          });
           toast.success("Login successful");
           await nav({ to: consumeProtectedPath() });
         } catch (error) {

@@ -15,7 +15,7 @@ import {
   useRecords,
 } from "@/lib/carbon";
 
-const { mockAuth } = vi.hoisted(() => ({
+const { mockAuth, mockCloud } = vi.hoisted(() => ({
   mockAuth: {
     currentUser: null as null | {
       uid: string;
@@ -24,12 +24,20 @@ const { mockAuth } = vi.hoisted(() => ({
       metadata: { creationTime: string };
     },
   },
+  mockCloud: {
+    saveCloudAccount: vi.fn().mockResolvedValue(undefined),
+    saveCloudRecord: vi.fn().mockResolvedValue(undefined),
+    deleteCloudRecord: vi.fn().mockResolvedValue(undefined),
+    watchAccount: vi.fn(() => () => {}),
+    watchRecords: vi.fn(() => () => {}),
+  },
 }));
 
 vi.mock("@/lib/firebase", () => ({
   auth: { get currentUser() { return mockAuth.currentUser; } },
 }));
 vi.mock("firebase/auth", () => ({ onAuthStateChanged: () => () => {} }));
+vi.mock("@/lib/cloud-data", () => mockCloud);
 
 beforeEach(() => {
   localStorage.clear();
@@ -77,18 +85,22 @@ describe("dailyElectricityEmissions", () => {
 });
 
 describe("account data storage", () => {
-  it("starts a new account with no seeded records", () => {
+  it("starts a new account with no seeded records", async () => {
     const { result } = renderHook(() => useRecords());
 
     expect(result.current).toEqual([]);
-    act(() => addRecord({ date: "2026-11-10", transport: 1, energy: 2, lpg: 3, food: 4 }));
+    await act(async () => addRecord({ date: "2026-11-10", transport: 1, energy: 2, lpg: 3, food: 4 }));
     expect(result.current).toHaveLength(1);
+    expect(mockCloud.saveCloudRecord).toHaveBeenCalledWith(
+      "rakshitha-uid",
+      expect.objectContaining({ date: "2026-11-10" }),
+    );
   });
 
-  it("keeps new users' records, profile, and goals separate", () => {
-    addRecord({ date: "2026-11-10", transport: 1, energy: 2, lpg: 3, food: 4 });
-    setUser({ name: "Rakshitha", email: "rakshitha@example.com", joined: "2026-11-10" });
-    setMonthlyGoal(75);
+  it("keeps new users' records, profile, and goals separate", async () => {
+    await addRecord({ date: "2026-11-10", transport: 1, energy: 2, lpg: 3, food: 4 });
+    await setUser({ name: "Rakshitha", email: "rakshitha@example.com", joined: "2026-11-10" });
+    await setMonthlyGoal(75);
 
     const rakshithaRecords = JSON.parse(localStorage.getItem("carbontracker.rakshitha-uid.records") ?? "[]");
     expect(rakshithaRecords).toHaveLength(1);
@@ -104,7 +116,7 @@ describe("account data storage", () => {
 
     expect(getUser().name).toBe("Niranjan");
     expect(getMonthlyGoal()).toBe(100);
-    addRecord({ date: "2026-11-10", transport: 5, energy: 6, lpg: 7, food: 8 });
+    await addRecord({ date: "2026-11-10", transport: 5, energy: 6, lpg: 7, food: 8 });
     expect(JSON.parse(localStorage.getItem("carbontracker.niranjan-uid.records") ?? "[]")).toHaveLength(1);
 
     mockAuth.currentUser = {

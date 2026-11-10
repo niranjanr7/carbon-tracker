@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { deleteCloudRecord, saveCloudAccount, saveCloudRecord, watchAccount, watchRecords } from "@/lib/cloud-data";
+import { toast } from "sonner";
 
 export type CarbonRecord = {
   id: string;
@@ -92,16 +94,30 @@ function save(next: CarbonRecord[]) {
   listeners.forEach((l) => l());
 }
 
+function reportCloudError(error: Error) {
+  toast.error(`Unable to sync account data: ${error.message}`);
+}
+
 export function useRecords() {
   const [recs, setRecs] = useState<CarbonRecord[]>(EMPTY);
   useEffect(() => {
+    let unsubscribeRecords: (() => void) | undefined;
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      unsubscribeRecords?.();
+      setRecs(firebaseUser ? load() : EMPTY);
+      if (!firebaseUser) return;
+      unsubscribeRecords = watchRecords(firebaseUser.uid, (records) => {
+        localStorage.setItem(accountKey(firebaseUser.uid, "records"), JSON.stringify(records));
+        setRecs(records);
+        listeners.forEach((listener) => listener());
+      }, reportCloudError);
+    }, reportCloudError);
     const l = () => setRecs(load());
-    l();
     listeners.add(l);
-    const unsubscribe = onAuthStateChanged(auth, l);
     window.addEventListener("storage", l);
     return () => {
       listeners.delete(l);
+      unsubscribeRecords?.();
       unsubscribe();
       window.removeEventListener("storage", l);
     };
@@ -111,19 +127,41 @@ export function useRecords() {
 export function useUser() {
   const [u, setU] = useState<User>(EMPTY_USER);
   useEffect(() => {
+    let unsubscribeAccount: (() => void) | undefined;
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      unsubscribeAccount?.();
+      setU(firebaseUser ? getUser() : EMPTY_USER);
+      if (!firebaseUser) return;
+      unsubscribeAccount = watchAccount(firebaseUser.uid, (account) => {
+        if (account.profile) {
+          localStorage.setItem(accountKey(firebaseUser.uid, "user"), JSON.stringify(account.profile));
+          setU(account.profile);
+        }
+      }, reportCloudError);
+    }, reportCloudError);
     const l = () => setU(getUser());
-    l();
     listeners.add(l);
-    const unsubscribe = onAuthStateChanged(auth, l);
     return () => {
       listeners.delete(l);
+      unsubscribeAccount?.();
       unsubscribe();
     };
   }, []);
   return u;
 }
-export const addRecord = (r: Omit<CarbonRecord, "id">) => save([{ ...r, id: crypto.randomUUID() }, ...load()]);
-export const deleteRecord = (id: string) => save(load().filter((r) => r.id !== id));
+export async function addRecord(r: Omit<CarbonRecord, "id">) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Cannot save carbon records without a signed-in user.");
+  const record = { ...r, id: crypto.randomUUID() };
+  await saveCloudRecord(uid, record);
+  save([record, ...load()]);
+}
+export async function deleteRecord(id: string) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Cannot delete carbon records without a signed-in user.");
+  await deleteCloudRecord(uid, id);
+  save(load().filter((r) => r.id !== id));
+}
 
 export type User = { name: string; email: string; joined: string };
 export function getUser(): User {
@@ -138,12 +176,13 @@ export function getUser(): User {
         joined: firebaseUser.metadata.creationTime?.slice(0, 10) ?? "",
       };
 }
-export const setUser = (u: User) => {
+export async function setUser(u: User) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Cannot save a profile without a signed-in user.");
+  await saveCloudAccount(uid, { profile: u });
   localStorage.setItem(accountKey(uid, "user"), JSON.stringify(u));
   listeners.forEach((l) => l());
-};
+}
 
 export function migrateLegacyUserData(uid: string, email: string) {
   if (typeof window === "undefined") return;
@@ -169,15 +208,43 @@ function readGoal(key: "goal" | "monthlyGoal", fallback: number) {
   const value = localStorage.getItem(accountKey(uid, key));
   return value === null ? fallback : Number(value);
 }
-function setGoalValue(key: "goal" | "monthlyGoal", value: number) {
+async function setGoalValue(key: "goal" | "monthlyGoal", value: number) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Cannot save goals without a signed-in user.");
+  await saveCloudAccount(uid, { [key]: value });
   localStorage.setItem(accountKey(uid, key), String(value));
+  listeners.forEach((l) => l());
 }
 export const getGoal = () => readGoal("goal", 20);
 export const setGoal = (g: number) => setGoalValue("goal", g);
 export const getMonthlyGoal = () => readGoal("monthlyGoal", 100);
 export const setMonthlyGoal = (g: number) => setGoalValue("monthlyGoal", g);
+
+export function useMonthlyGoal() {
+  const [goal, setGoalState] = useState(getMonthlyGoal);
+  useEffect(() => {
+    let unsubscribeAccount: (() => void) | undefined;
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      unsubscribeAccount?.();
+      setGoalState(firebaseUser ? getMonthlyGoal() : 100);
+      if (!firebaseUser) return;
+      unsubscribeAccount = watchAccount(firebaseUser.uid, (account) => {
+        if (account.monthlyGoal !== undefined) {
+          localStorage.setItem(accountKey(firebaseUser.uid, "monthlyGoal"), String(account.monthlyGoal));
+          setGoalState(account.monthlyGoal);
+        }
+      }, reportCloudError);
+    }, reportCloudError);
+    const onLocalUpdate = () => setGoalState(getMonthlyGoal());
+    listeners.add(onLocalUpdate);
+    return () => {
+      listeners.delete(onLocalUpdate);
+      unsubscribeAccount?.();
+      unsubscribe();
+    };
+  }, []);
+  return goal;
+}
 
 export function stats(records: CarbonRecord[]) {
   const now = new Date();
