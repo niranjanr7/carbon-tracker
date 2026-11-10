@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { addRecord, dailyElectricityEmissions, FACTORS } from "@/lib/carbon";
 import { seo } from "@/lib/seo";
-import { RequireAuth } from "@/components/RequireAuth";
 
 export const Route = createFileRoute("/calculator")({
   head: () => seo("Carbon Calculator", "Enter your daily activities to calculate your carbon footprint."),
@@ -24,7 +23,7 @@ const normalizeLeadingZeros = (value: string) => value.replace(/^(-?)0+(?=\d)/, 
 const numericValue = (value: string) => Number(value) || 0;
 
 function CalculatorPage() {
-  return <RequireAuth><CalculatorContent /></RequireAuth>;
+  return <CalculatorContent />;
 }
 
 function CalculatorContent() {

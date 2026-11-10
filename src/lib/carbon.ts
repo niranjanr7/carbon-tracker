@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 export type CarbonRecord = {
   id: string;
@@ -65,45 +67,28 @@ export function monthlyGoalStreak(
   }
 }
 
-const KEY = "carbontracker.records";
-const USER_KEY = "carbontracker.user";
-const GOAL_KEY = "carbontracker.goal";
-const MONTHLY_GOAL_KEY = "carbontracker.monthlyGoalPerPerson";
-
-function seed(): CarbonRecord[] {
-  const out: CarbonRecord[] = [];
-  const today = new Date();
-  for (let i = 0; i < 180; i += 3) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const s = Math.sin(i) * 0.5 + 1;
-    out.push({
-      id: crypto.randomUUID(),
-      date: d.toISOString().slice(0, 10),
-      transport: +(4 * s + 1).toFixed(1),
-      energy: +(3 + Math.cos(i) * 0.6).toFixed(1),
-      lpg: +(1.4 + Math.sin(i / 2) * 0.3).toFixed(1),
-      food: +(2.5 + Math.cos(i / 3) * 0.6).toFixed(1),
-    });
-  }
-  return out;
-}
-
-let cache: CarbonRecord[] | null = null;
+const LEGACY_KEYS = {
+  records: "carbontracker.records",
+  user: "carbontracker.user",
+  goal: "carbontracker.goal",
+  monthlyGoal: "carbontracker.monthlyGoalPerPerson",
+};
+type DataKey = keyof typeof LEGACY_KEYS;
+const accountKey = (uid: string, key: DataKey) => `carbontracker.${encodeURIComponent(uid)}.${key}`;
 const listeners = new Set<() => void>();
 const EMPTY: CarbonRecord[] = [];
+const EMPTY_USER: User = { name: "", email: "", joined: "" };
 
 function load(): CarbonRecord[] {
-  if (typeof window === "undefined") return EMPTY;
-  if (cache) return cache;
-  const raw = localStorage.getItem(KEY);
-  cache = raw ? JSON.parse(raw) : seed();
-  if (!raw) localStorage.setItem(KEY, JSON.stringify(cache));
-  return cache!;
+  const uid = auth.currentUser?.uid;
+  if (typeof window === "undefined" || !uid) return EMPTY;
+  const raw = localStorage.getItem(accountKey(uid, "records"));
+  return raw ? JSON.parse(raw) as CarbonRecord[] : EMPTY;
 }
 function save(next: CarbonRecord[]) {
-  cache = [...next].sort((a, b) => b.date.localeCompare(a.date));
-  localStorage.setItem(KEY, JSON.stringify(cache));
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Cannot save carbon records without a signed-in user.");
+  localStorage.setItem(accountKey(uid, "records"), JSON.stringify([...next].sort((a, b) => b.date.localeCompare(a.date))));
   listeners.forEach((l) => l());
 }
 
@@ -113,13 +98,28 @@ export function useRecords() {
     const l = () => setRecs(load());
     l();
     listeners.add(l);
-    return () => { listeners.delete(l); };
+    const unsubscribe = onAuthStateChanged(auth, l);
+    window.addEventListener("storage", l);
+    return () => {
+      listeners.delete(l);
+      unsubscribe();
+      window.removeEventListener("storage", l);
+    };
   }, []);
   return recs;
 }
 export function useUser() {
-  const [u, setU] = useState<User>({ name: "", email: "", joined: "" });
-  useEffect(() => setU(getUser()), []);
+  const [u, setU] = useState<User>(EMPTY_USER);
+  useEffect(() => {
+    const l = () => setU(getUser());
+    l();
+    listeners.add(l);
+    const unsubscribe = onAuthStateChanged(auth, l);
+    return () => {
+      listeners.delete(l);
+      unsubscribe();
+    };
+  }, []);
   return u;
 }
 export const addRecord = (r: Omit<CarbonRecord, "id">) => save([{ ...r, id: crypto.randomUUID() }, ...load()]);
@@ -127,16 +127,57 @@ export const deleteRecord = (id: string) => save(load().filter((r) => r.id !== i
 
 export type User = { name: string; email: string; joined: string };
 export function getUser(): User {
-  if (typeof window === "undefined") return { name: "Guest", email: "", joined: "" };
-  const raw = localStorage.getItem(USER_KEY);
-  return raw ? JSON.parse(raw) : { name: "Priya Sharma", email: "priya@example.com", joined: new Date().toISOString().slice(0, 10) };
+  const firebaseUser = auth.currentUser;
+  if (typeof window === "undefined" || !firebaseUser) return EMPTY_USER;
+  const raw = localStorage.getItem(accountKey(firebaseUser.uid, "user"));
+  return raw
+    ? JSON.parse(raw) as User
+    : {
+        name: firebaseUser.displayName ?? firebaseUser.email?.split("@")[0] ?? "",
+        email: firebaseUser.email ?? "",
+        joined: firebaseUser.metadata.creationTime?.slice(0, 10) ?? "",
+      };
 }
-export const setUser = (u: User) => localStorage.setItem(USER_KEY, JSON.stringify(u));
-export const getGoal = () => (typeof window === "undefined" ? 20 : Number(localStorage.getItem(GOAL_KEY) ?? 20));
-export const setGoal = (g: number) => localStorage.setItem(GOAL_KEY, String(g));
-export const getMonthlyGoal = () =>
-  typeof window === "undefined" ? 100 : Number(localStorage.getItem(MONTHLY_GOAL_KEY) ?? 100);
-export const setMonthlyGoal = (g: number) => localStorage.setItem(MONTHLY_GOAL_KEY, String(g));
+export const setUser = (u: User) => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Cannot save a profile without a signed-in user.");
+  localStorage.setItem(accountKey(uid, "user"), JSON.stringify(u));
+  listeners.forEach((l) => l());
+};
+
+export function migrateLegacyUserData(uid: string, email: string) {
+  if (typeof window === "undefined") return;
+  const legacyProfile = localStorage.getItem(LEGACY_KEYS.user);
+  if (!legacyProfile) return;
+
+  const legacyUser = JSON.parse(legacyProfile) as User;
+  if (legacyUser.email.trim().toLowerCase() !== email.trim().toLowerCase()) return;
+
+  for (const key of Object.keys(LEGACY_KEYS) as DataKey[]) {
+    const legacyValue = localStorage.getItem(LEGACY_KEYS[key]);
+    const destinationKey = accountKey(uid, key);
+    if (legacyValue !== null && localStorage.getItem(destinationKey) === null) {
+      localStorage.setItem(destinationKey, legacyValue);
+    }
+    localStorage.removeItem(LEGACY_KEYS[key]);
+  }
+}
+
+function readGoal(key: "goal" | "monthlyGoal", fallback: number) {
+  const uid = auth.currentUser?.uid;
+  if (typeof window === "undefined" || !uid) return fallback;
+  const value = localStorage.getItem(accountKey(uid, key));
+  return value === null ? fallback : Number(value);
+}
+function setGoalValue(key: "goal" | "monthlyGoal", value: number) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Cannot save goals without a signed-in user.");
+  localStorage.setItem(accountKey(uid, key), String(value));
+}
+export const getGoal = () => readGoal("goal", 20);
+export const setGoal = (g: number) => setGoalValue("goal", g);
+export const getMonthlyGoal = () => readGoal("monthlyGoal", 100);
+export const setMonthlyGoal = (g: number) => setGoalValue("monthlyGoal", g);
 
 export function stats(records: CarbonRecord[]) {
   const now = new Date();

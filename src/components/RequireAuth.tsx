@@ -3,6 +3,7 @@ import { onAuthStateChanged, type User } from "firebase/auth";
 import { useEffect, useState, type ReactNode } from "react";
 import { auth } from "@/lib/firebase";
 import { rememberProtectedPath } from "@/lib/auth";
+import { migrateLegacyUserData } from "@/lib/carbon";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
@@ -14,6 +15,15 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   useEffect(() => onAuthStateChanged(
     auth,
     (authenticatedUser) => {
+      if (authenticatedUser) {
+        try {
+          migrateLegacyUserData(authenticatedUser.uid, authenticatedUser.email ?? "");
+        } catch (migrationError) {
+          setError(migrationError instanceof Error ? migrationError.message : "Unable to load account data.");
+          setLoading(false);
+          return;
+        }
+      }
       setUser(authenticatedUser);
       setLoading(false);
     },

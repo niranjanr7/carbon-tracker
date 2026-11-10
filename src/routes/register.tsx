@@ -27,10 +27,11 @@ function Register() {
         e.preventDefault();
         if (f.pw !== f.pw2) { toast.error("Passwords don't match"); return; }
         setLoading(true);
+        const email = f.email.trim().toLowerCase();
         try {
-          const credential = await createUserWithEmailAndPassword(auth, f.email, f.pw);
+          const credential = await createUserWithEmailAndPassword(auth, email, f.pw);
           await updateProfile(credential.user, { displayName: f.name });
-          setUser({ name: f.name, email: f.email, joined: new Date().toISOString().slice(0, 10) });
+          setUser({ name: f.name, email, joined: new Date().toISOString().slice(0, 10) });
           toast.success("Account created");
           await nav({ to: consumeProtectedPath() });
         } catch (error) {

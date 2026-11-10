@@ -4,7 +4,6 @@ import { AppShell, Panel } from "@/components/AppShell";
 import { Donut, Bars, Trend } from "@/components/Charts";
 import { useUser, stats, useRecords } from "@/lib/carbon";
 import { seo } from "@/lib/seo";
-import { RequireAuth } from "@/components/RequireAuth";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => seo("Dashboard", "Your carbon footprint at a glance."),
@@ -21,7 +20,7 @@ function Stat({ icon: I, label, value, sub }: { icon: typeof Leaf; label: string
 }
 
 function Dashboard() {
-  return <RequireAuth><DashboardContent /></RequireAuth>;
+  return <DashboardContent />;
 }
 
 function DashboardContent() {

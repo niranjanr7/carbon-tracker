@@ -7,6 +7,7 @@ import { useState } from "react";
 import { signOut } from "firebase/auth";
 import { toast } from "sonner";
 import { auth } from "@/lib/firebase";
+import { RequireAuth } from "@/components/RequireAuth";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -29,6 +30,14 @@ export function Logo({ light }: { light?: boolean }) {
 }
 
 export function AppShell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+  return (
+    <RequireAuth>
+      <AppShellContent title={title} subtitle={subtitle}>{children}</AppShellContent>
+    </RequireAuth>
+  );
+}
+
+function AppShellContent({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const logout = async () => {
